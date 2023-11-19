@@ -1,0 +1,112 @@
+library(readr)
+library(tseries)
+library(forecast)
+library(timeSeries)
+library(ggplot2)
+library(plotly)
+library(trend)
+library(lmtest)
+EURUSD_X <- read_csv("C:/Users/User/Downloads/EURUSD=X.csv")
+View(EURUSD_X)
+EURUSD_X <- EURUSD_X[,-7]
+#Close is the variable of interest
+
+#Graph of the original dataset
+ggplot(EURUSD_X, aes(Close)) + geom_histogram(color="Blue", fill="red")
+
+#Testing for normality
+ggplot(EURUSD_X, aes(Close)) + geom_histogram(color="Blue", fill="red")
+#alternative
+qqnorm(EURUSD_X$Close, main="Normal")
+qqline(EURUSD_X$Close)
+#alternative
+shapiro.test(EURUSD_X$Close)
+
+#Testing for stationarity using ADF & ACF
+adf.test(EURUSD_X$Close, alternative = c("stationary"))
+#alternative
+ACFA <- acf(EURUSD_X$Close,lag.max = 10)
+ACFA
+PCFA <- pacf(EURUSD_X$Close,lag.max = 10)
+PCFA
+
+#After using tests for stationarity, it shows it's not stationary, I'll then difference the series
+#Differencing the series
+ndiffs(EURUSD_X$Close) #it gives me 1, which I put in diff code below
+new_series <- diff(EURUSD_X$Close, 1) #Stationary series
+
+#New test for stationarity using ADF & ACF after differencing
+adf.test(new_series, alternative = c("stationary"))
+#alternative
+ACF <- acf(new_series, lag.max = 10)
+ACF
+PCF <- pacf(new_series, lag.max = 10)
+PCF
+
+#To Obtain trends and plots of the trends, I'll convert the data to a time series data
+ts_Close <- ts(new_series, start = c(2022,2),  end = c(2023, 2), frequency = 12) #time series
+ts_Close #Trend of the time series 
+plot.ts(new_series) #Plots of new_data
+plot(ts_Close) #Plots of the trends, it shows multiplicative series
+
+#To obtain the seasonal variation, I'll decompose
+#Time series decomposition is a mathematical procedure which transforms a time series into multiple different time series
+#(e.g often split into Seasonal, Trend, Random)
+decompose_Close <- decompose(ts_Close, type = "multiplicative")
+decompose_Close$seasonal
+adjust_Close <- ts_Close/decompose_Close$seasonal
+plot(adjust_Close)
+
+#Modelling
+ar_1 <- ar(ts_Close, aic = F, order.max = 1)
+ar_2 <- ar(ts_Close, aic = F, order.max = 2)
+ar_3 <- ar(ts_Close, aic = F, order.max = 3)
+ma_1 <- ma(ts_Close, order = 1, centre = T)
+ma_2 <- ma(ts_Close, order = 2, centre = T)
+ma_3 <- ma(ts_Close, order = 3, centre = T)
+arma_1_1 <- arma(ts_Close, order = c(1,1))
+arma_1_2 <- arma(ts_Close, order = c(1,2))
+arma_2_2 <- arma(ts_Close, order = c(2,2))
+arma_2_3 <- arma(ts_Close, order = c(2,3))
+arima_1_1_1 <- Arima(ts_Close,order = c(1,1,1))
+arima_2_1_2 <- Arima(ts_Close,order = c(2,1,2))
+checkresiduals(arima_1_1_1)
+checkresiduals(arima_2_1_2)
+#To check results
+summary(ar_1)
+summary(ar_2)
+summary(ar_3)
+summary(ma_1)
+summary(ma_2)
+summary(ma_3)
+summary(arma_1_1)
+summary(arma_1_2)
+summary(arma_2_2)
+summary(arma_2_3)
+summary(arima_1_1_1)
+summary(arima_2_1_2)
+
+#Residual of the model
+r <- residuals(arima_2_1_2)
+plot(r) #Plot residual
+
+#Fitness of the model
+ar_fitted <- EURUSD_X$Close - r
+
+#Select the best model
+AIC(arima_1_1_1) 
+AIC(arima_2_1_2)  #is the best model for the data, cos it has d least AIC
+BIC(arima_1_1_1)
+BIC(arima_1_1_1)
+
+#Adequacy of model
+Box.test(ts_Close,lag = 10, type = "Ljung")
+
+#Testing the significance of paramter of ARIMA model using the lmtest package, brings out coeftest function
+coeftest(arima_1_1_1)
+coeftest(arima_2_1_2)
+
+#Forecast using the best model and predict next four month
+forecast_Close <- forecast(arima_2_1_2, h = 4, level = 95)
+plot(forecast_Close)
+forecast_Close
